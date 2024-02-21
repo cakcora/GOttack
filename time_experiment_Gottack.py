@@ -1,11 +1,14 @@
 import pandas as pd
 import time
+import statistics as stats
 from deeprobust.graph.defense import GCN
 from deeprobust.graph.utils import *
 from tqdm import tqdm
 from deeprobust.graph.data import Dataset
-
+import warnings
+warnings.filterwarnings("ignore")
 from OrbitAttack import OrbitAttack
+from orbit_table_generator import OrbitTableGenerator
 
 """
 Author: Ngo Bao, Zulfikar
@@ -13,13 +16,12 @@ Credits:    The OrbitAttack is implemented with reference to Nettack's source co
             a method proposed in the paper: 'Adversarial Attacks on Neural Networks for Graph Data'
             by Daniel Zügner, Amir Akbarnejad and Stephan Günnemann
 """
-
-df_2d = pd.read_csv("dataset/orbit/cora_orbit_table.csv")
-
+dataset_name = 'polblogs'
+df_2d = OrbitTableGenerator(dataset_name).generate_orbit_table()
 device = "cpu"
 
 
-def test1(adj, features, target_node):
+def test_acc_GCN(adj, features, target_node):
     ''' test on GCN '''
     gcn = GCN(nfeat=features.shape[1], nhid=16, nclass=labels.max().item() + 1, dropout=0.5, device=device)
     gcn = gcn.to(device)
@@ -65,8 +67,8 @@ def select_nodes(target_gcn=None):
     return high + low + other
 
 
-
-data = Dataset(root='dataset', name='cora')
+######################### Loading dataset  #########################
+data = Dataset(root='dataset', name=dataset_name)
 adj, features, labels = data.adj, data.features, data.labels
 
 idx_train, idx_val, idx_test = data.idx_train, data.idx_val, data.idx_test
@@ -81,19 +83,7 @@ surrogate.fit(features, adj, labels, idx_train, idx_val, patience=30)
 
 
 
-
-######################### Setup GAT Surrogate model  #########################
-
 miss= np.zeros((6, 10))
-
-#node_list = random.sample(list(idx_unlabeled),)
-
-# Replace 'your_file.csv' with the path to your CSV file
-# df = pd.read_csv('nodelist.csv')
-# # Convert DataFrame to list of lists
-# # Extract the column as a list
-# column_list = df['tnode'].tolist()
-
 node_list = select_nodes()
 
 num = len(node_list)
@@ -121,7 +111,7 @@ for i in range(5):
             model = model.to(device)
             model.attack(features, adj, labels, target_node, n_perturbations, verbose=False)
             modified_adj = model.modified_adj
-            acc = test1(modified_adj, features, target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
+            acc = test_acc_GCN(modified_adj, features, target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
             bst_edge[target_node] = [model.best_edge_list, acc]
             if acc == 0:
                 cnt1 += 1
@@ -135,11 +125,9 @@ for i in range(5):
 
     # Calculate the elapsed time
     elapsed_time = end_time - start_time
-    # Print the elapsed time
-    print(f"Elapsed time: {elapsed_time} seconds")
-    print(miss[1][_])
     time_result.append(elapsed_time)
-
-print(sum(time_result)/len(time_result))
+print("-------------------------------------Result---------------------------------")
+print(time_result)
+print("Time experiment (5 times running):" + str(round(sum(time_result)/len(time_result),2)) + "STD: " + str(round(stats.stdev(time_result),2)))
 
 

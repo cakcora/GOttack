@@ -1,6 +1,6 @@
 
 import time
-
+import statistics as stats
 from deeprobust.graph.defense import GCN
 
 from nettack_dpr import Nettack
@@ -22,9 +22,6 @@ def test1(adj, features, target_node):
     probs = torch.exp(output[[target_node]])[0]
     # acc_test = accuracy(output[[target_node]], labels[target_node])
     acc_test = (output.argmax(1)[target_node] == labels[target_node])
-    print('Target node probs: {}'.format(probs.detach().cpu().numpy()))
-    print(output.argmax(1)[target_node])
-    print(labels[target_node])
     #acc_test = accuracy(output[idx_test], labels[idx_test])
 
     #print("Overall test set results:",
@@ -72,7 +69,7 @@ def select_nodes(target_gcn=None):
 
 
 #data = Dataset(root='C:\pythonProject1', name='cora') #Dataset(root='/tmp/', name=args.dataset)
-data = Dataset(root='dataset', name='cora')
+data = Dataset(root='', name='polblogs')
 adj, features, labels = data.adj, data.features, data.labels
 
 idx_train, idx_val, idx_test = data.idx_train, data.idx_val, data.idx_test
@@ -99,45 +96,48 @@ miss= np.zeros((6, 10))
 # # Convert DataFrame to list of lists
 # # Extract the column as a list
 # column_list = df['tnode'].tolist()
+time_result = []
+for i in range(5):
 
-node_list = [1554, 929, 2406, 1163, 1342, 1049, 2082, 1820, 1347, 1185, 1674, 132, 1765, 1306, 572, 10, 1314, 975, 1118, 591, 662, 805, 1605, 1463, 1196, 1255, 1526, 670, 1374, 668, 1481, 1515, 987, 1660, 7, 512, 2314, 1553, 2151, 251]
+    node_list = select_nodes()
 
-num = len(node_list)
-
-nofnode_modification_lst = [1]
-
-# Start the timer
-start_time = time.time()
-
-for _ in range(len(nofnode_modification_lst)):
-    nofnode_modification = nofnode_modification_lst[_]
-    cnt1=0
-    edg_pub_rate = nofnode_modification  # 0.
-    degrees = adj.sum(0).A1
     num = len(node_list)
-    bst_edge={}
 
-    for target_node in tqdm(node_list):
-        n_perturbations = edg_pub_rate #2 #math.ceil(degrees[target_node] * edg_pub_rate)  # int(degrees[target_node] * edg_pub_rate)
-        model = Nettack(surrogate, nnodes=adj.shape[0], attack_structure=True, attack_features=True, device=device)
-        model = model.to(device)
-        model.attack(features, adj, labels, target_node, n_perturbations, verbose=False)
-        modified_adj = model.modified_adj
-        acc = test1(modified_adj, features, target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
-        bst_edge[target_node] = [model.best_edge_list, acc]
-        if acc == 0:
-            cnt1 += 1
+    nofnode_modification_lst = [1]
 
-    miss[1][_] = cnt1 / num
+    # Start the timer
+    start_time = time.time()
 
-######################################## ++++++++++    END   ++++++++++ For Testing the model ##########################
+    for _ in range(len(nofnode_modification_lst)):
+        nofnode_modification = nofnode_modification_lst[_]
+        cnt1=0
+        edg_pub_rate = nofnode_modification  # 0.
+        degrees = adj.sum(0).A1
+        num = len(node_list)
+        bst_edge={}
 
-# Stop the timer
-end_time = time.time()
+        for target_node in tqdm(node_list):
+            n_perturbations = edg_pub_rate #2 #math.ceil(degrees[target_node] * edg_pub_rate)  # int(degrees[target_node] * edg_pub_rate)
+            model = Nettack(surrogate, nnodes=adj.shape[0], attack_structure=True, attack_features=True, device=device)
+            model = model.to(device)
+            model.attack(features, adj, labels, target_node, n_perturbations, verbose=False)
+            modified_adj = model.modified_adj
+            acc = test1(modified_adj, features, target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
+            bst_edge[target_node] = [model.best_edge_list, acc]
+            if acc == 0:
+                cnt1 += 1
 
-# Calculate the elapsed time
-elapsed_time = end_time - start_time
-# Print the elapsed time
-print(f"Elapsed time: {elapsed_time} seconds")
-print(miss[1][_] )
+        miss[1][_] = cnt1 / num
+
+    ######################################## ++++++++++    END   ++++++++++ For Testing the model ##########################
+
+    # Stop the timer
+    end_time = time.time()
+
+    # Calculate the elapsed time
+    elapsed_time = end_time - start_time
+    time_result.append(elapsed_time)
+print("-------------------------------------Result---------------------------------")
+print(time_result)
+print("Time experiment (5 times running):" + str(round(sum(time_result)/len(time_result),2)) + "STD: " + str(round(stats.stdev(time_result),2)))
 

@@ -93,7 +93,7 @@ def test_GSAGE(adj, data, target_node):
 
 ####### Read the Graphlet data from the file
 
-with open('../dataset/orbit/graph_dpr_polblogs.out', 'r') as file:
+with open('../dataset/orbit/dpr_polblogs.out', 'r') as file:
     lines = file.readlines()
 
 # Process the lines to create a list of lists

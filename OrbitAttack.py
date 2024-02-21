@@ -24,7 +24,7 @@ from torch import spmm
 class OrbitAttack(BaseAttack):
 
 
-    def __init__(self, model,orbit_dict,attack_type = 1518, nnodes=None, attack_structure=True, attack_features=False, device='cpu'):
+    def __init__(self, model,orbit_dict,attack_type = '1518', nnodes=None, attack_structure=True, attack_features=False, device='cpu'):
 
         super(OrbitAttack, self).__init__(model, nnodes, attack_structure=attack_structure, attack_features=attack_features, device=device)
 
@@ -200,7 +200,7 @@ class OrbitAttack(BaseAttack):
                 # Do not consider edges that, if added/removed, would lead to a violation of the
                 # likelihood ration Chi_square cutoff value.
                 powerlaw_filter = filter_chisquare(new_ratios, ll_cutoff)
-                filtered_edges_final = filtered_edges[powerlaw_filter]
+                filtered_edges_final =  self.potential_edges
 
                 # Compute new entries in A_hat_square_uv
                 a_hat_uv_new = self.compute_new_a_hat_uv(filtered_edges_final, target_node)
