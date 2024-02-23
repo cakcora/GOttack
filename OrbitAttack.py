@@ -24,9 +24,9 @@ from torch import spmm
 class OrbitAttack(BaseAttack):
 
 
-    def __init__(self, model,orbit_dict,attack_type = '1518', nnodes=None, attack_structure=True, attack_features=False, device='cpu'):
+    def __init__(self, model,orbit_dict,attack_type = '1518', nnodes=None, device='cpu'):
 
-        super(OrbitAttack, self).__init__(model, nnodes, attack_structure=attack_structure, attack_features=attack_features, device=device)
+        super(OrbitAttack, self).__init__(model, nnodes, attack_structure=True, attack_features=False, device=device)
 
         self.structure_perturbations = []
         self.feature_perturbations = []
@@ -57,7 +57,7 @@ class OrbitAttack(BaseAttack):
         W = surrogate.gc1.weight @ surrogate.gc2.weight
         return W.detach().cpu().numpy()
 
-    def attack(self, features, adj, labels, target_node, n_perturbations, direct=True, n_influencers= 0, ll_cutoff=0.004, verbose=True, **kwargs):
+    def attack(self, features, adj, labels, target_node, n_perturbations, n_influencers= 0, ll_cutoff=0.004, verbose=True, **kwargs):
         """Generate perturbations on the input graph.
 
         Parameters
@@ -110,9 +110,7 @@ class OrbitAttack(BaseAttack):
 
         attack_features = self.attack_features
         attack_structure = self.attack_structure
-        assert not (direct==False and n_influencers==0), "indirect mode requires at least one influencer node"
         assert n_perturbations > 0, "need at least one perturbation"
-        assert attack_features or attack_structure, "either attack_features or attack_structure must be true"
 
         # adj_norm = utils.normalize_adj_tensor(modified_adj, sparse=True)
         self.adj_norm = utils.normalize_adj(self.modified_adj)
@@ -127,50 +125,21 @@ class OrbitAttack(BaseAttack):
 
         if verbose:
             print("##### Starting attack #####")
-            if attack_structure and attack_features:
-                print("##### Attack node with ID {} using structure and feature perturbations #####".format(target_node))
-            elif attack_features:
-                print("##### Attack only using feature perturbations #####")
-            elif attack_structure:
-                print("##### Attack only using structure perturbations #####")
-            if direct:
-                print("##### Attacking the node directly #####")
-            else:
-                print("##### Attacking the node indirectly via {} influencer nodes #####".format(n_influencers))
+            print("##### Attack only using structure perturbations #####")
             print("##### Performing {} perturbations #####".format(n_perturbations))
 
-        if attack_structure:
-            # Setup starting values of the likelihood ratio test.
-            degree_sequence_start = self.ori_adj.sum(0).A1
-            current_degree_sequence = self.modified_adj.sum(0).A1
-            d_min = 2
+        # Setup starting values of the likelihood ratio test.
+        degree_sequence_start = self.ori_adj.sum(0).A1
+        current_degree_sequence = self.modified_adj.sum(0).A1
+        d_min = 2
 
-            S_d_start = np.sum(np.log(degree_sequence_start[degree_sequence_start >= d_min]))
-            current_S_d = np.sum(np.log(current_degree_sequence[current_degree_sequence >= d_min]))
-            n_start = np.sum(degree_sequence_start >= d_min)
-            current_n = np.sum(current_degree_sequence >= d_min)
-            alpha_start = compute_alpha(n_start, S_d_start, d_min)
+        S_d_start = np.sum(np.log(degree_sequence_start[degree_sequence_start >= d_min]))
+        current_S_d = np.sum(np.log(current_degree_sequence[current_degree_sequence >= d_min]))
+        n_start = np.sum(degree_sequence_start >= d_min)
+        current_n = np.sum(current_degree_sequence >= d_min)
+        alpha_start = compute_alpha(n_start, S_d_start, d_min)
 
-            log_likelihood_orig = compute_log_likelihood(n_start, alpha_start, S_d_start, d_min)
-
-        # if len(self.influencer_nodes) == 0:
-        #     if not direct:
-        #         # Choose influencer nodes
-        #         infls, add_infls = self.get_attacker_nodes(n_influencers, add_additional_nodes=True)
-        #         self.influencer_nodes = np.concatenate((infls, add_infls)).astype("int")
-        #         # Potential edges are all edges from any attacker to any other node, except the respective
-        #         # attacker itself or the node being attacked.
-        #         self.potential_edges = np.row_stack([np.column_stack((np.tile(infl, self.nnodes - 2),
-        #                                                     np.setdiff1d(np.arange(self.nnodes),
-        #                                                     np.array([target_node,infl])))) for infl in
-        #                                                     self.influencer_nodes])
-        #         if verbose:
-        #             print("Influencer nodes: {}".format(self.influencer_nodes))
-        #     else:
-        #         # direct attack
-        #         influencers = [target_node]
-        #         self.potential_edges = np.column_stack((np.tile(target_node, self.nnodes-1), np.setdiff1d(np.arange(self.nnodes), target_node)))
-        #         self.influencer_nodes = np.array(influencers)
+        log_likelihood_orig = compute_log_likelihood(n_start, alpha_start, S_d_start, d_min)
 
 
         self.potential_edges = (np.array([[target_node, value] for value in self.matching_index])).astype("int32")
@@ -179,76 +148,46 @@ class OrbitAttack(BaseAttack):
         for _ in range(n_perturbations):
             if verbose:
                 print("##### ...{}/{} perturbations ... #####".format(_+1, n_perturbations))
-            if attack_structure:
 
-                # Do not consider edges that, if removed, result in singleton edges in the graph.
-                # singleton_filter = filter_singletons(self.potential_edges, self.modified_adj)
-                filtered_edges = self.potential_edges
+            # Do not consider edges that, if removed, result in singleton edges in the graph.
+            # singleton_filter = filter_singletons(self.potential_edges, self.modified_adj)
+            filtered_edges = self.potential_edges
 
-                # Update the values for the power law likelihood ratio test.
+            # Update the values for the power law likelihood ratio test.
 
-                deltas = 2 * (1 - self.modified_adj[tuple(filtered_edges.T)].toarray()[0] )- 1
-                d_edges_old = current_degree_sequence[filtered_edges]
-                d_edges_new = current_degree_sequence[filtered_edges] + deltas[:, None]
-                new_S_d, new_n = update_Sx(current_S_d, current_n, d_edges_old, d_edges_new, d_min)
-                new_alphas = compute_alpha(new_n, new_S_d, d_min)
-                new_ll = compute_log_likelihood(new_n, new_alphas, new_S_d, d_min)
-                alphas_combined = compute_alpha(new_n + n_start, new_S_d + S_d_start, d_min)
-                new_ll_combined = compute_log_likelihood(new_n + n_start, alphas_combined, new_S_d + S_d_start, d_min)
-                new_ratios = -2 * new_ll_combined + 2 * (new_ll + log_likelihood_orig)
+            deltas = 2 * (1 - self.modified_adj[tuple(filtered_edges.T)].toarray()[0] )- 1
+            d_edges_old = current_degree_sequence[filtered_edges]
+            d_edges_new = current_degree_sequence[filtered_edges] + deltas[:, None]
+            new_S_d, new_n = update_Sx(current_S_d, current_n, d_edges_old, d_edges_new, d_min)
+            new_alphas = compute_alpha(new_n, new_S_d, d_min)
+            new_ll = compute_log_likelihood(new_n, new_alphas, new_S_d, d_min)
+            alphas_combined = compute_alpha(new_n + n_start, new_S_d + S_d_start, d_min)
+            new_ll_combined = compute_log_likelihood(new_n + n_start, alphas_combined, new_S_d + S_d_start, d_min)
+            new_ratios = -2 * new_ll_combined + 2 * (new_ll + log_likelihood_orig)
 
-                # Do not consider edges that, if added/removed, would lead to a violation of the
-                # likelihood ration Chi_square cutoff value.
-                powerlaw_filter = filter_chisquare(new_ratios, ll_cutoff)
-                filtered_edges_final =  self.potential_edges
+            # Do not consider edges that, if added/removed, would lead to a violation of the
+            # likelihood ration Chi_square cutoff value.
+            powerlaw_filter = filter_chisquare(new_ratios, ll_cutoff)
+            filtered_edges_final =  self.potential_edges
 
-                # Compute new entries in A_hat_square_uv
-                a_hat_uv_new = self.compute_new_a_hat_uv(filtered_edges_final, target_node)
-                # Compute the struct scores for each potential edge
-                struct_scores = self.struct_score(a_hat_uv_new, self.modified_features @ self.W)
+            # Compute new entries in A_hat_square_uv
+            a_hat_uv_new = self.compute_new_a_hat_uv(filtered_edges_final, target_node)
+            # Compute the struct scores for each potential edge
+            struct_scores = self.struct_score(a_hat_uv_new, self.modified_features @ self.W)
 
-                best_edge_ix = struct_scores.argmin()
-                best_edge_score = struct_scores.min()
-                best_edge = filtered_edges_final[best_edge_ix]
-                self.best_edge_list.append(best_edge)
-
-            if attack_features:
-                # Compute the feature scores for each potential feature perturbation
-                feature_ixs, feature_scores = self.feature_scores()
-                best_feature_ix = feature_ixs[0]
-                best_feature_score = feature_scores[0]
-
-            if attack_structure and attack_features:
-                # decide whether to choose an edge or feature to change
-                if best_edge_score < best_feature_score:
-                    if verbose:
-                        print("Edge perturbation: {}".format(best_edge))
-                    change_structure = True
-                else:
-                    if verbose:
-                        print("Feature perturbation: {}".format(best_feature_ix))
-                    change_structure=False
-
-            elif attack_structure:
-                change_structure = True
-            elif attack_features:
-                change_structure = False
-
-            if change_structure:
-                # perform edge perturbation
-                self.modified_adj[tuple(best_edge)] = self.modified_adj[tuple(best_edge[::-1])] = 1 - self.modified_adj[tuple(best_edge)]
-                self.adj_norm = utils.normalize_adj(self.modified_adj)
-
-                self.structure_perturbations.append(tuple(best_edge))
-                self.feature_perturbations.append(())
-                surrogate_losses.append(best_edge_score)
+            best_edge_ix = struct_scores.argmin()
+            best_edge_score = struct_scores.min()
+            best_edge = filtered_edges_final[best_edge_ix]
+            self.best_edge_list.append(best_edge)
 
 
-            else:
-                self.modified_features[tuple(best_feature_ix)] = 1 - self.modified_features[tuple(best_feature_ix)]
-                self.feature_perturbations.append(tuple(best_feature_ix))
-                self.structure_perturbations.append(())
-                surrogate_losses.append(best_feature_score)
+            # perform edge perturbation
+            self.modified_adj[tuple(best_edge)] = self.modified_adj[tuple(best_edge[::-1])] = 1 - self.modified_adj[tuple(best_edge)]
+            self.adj_norm = utils.normalize_adj(self.modified_adj)
+
+            self.structure_perturbations.append(tuple(best_edge))
+            self.feature_perturbations.append(())
+            surrogate_losses.append(best_edge_score)
 
         # return self.modified_adj, self.modified_features
 

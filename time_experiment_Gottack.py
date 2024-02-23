@@ -9,6 +9,7 @@ import warnings
 warnings.filterwarnings("ignore")
 from OrbitAttack import OrbitAttack
 from orbit_table_generator import OrbitTableGenerator
+import random
 
 """
 Author: Ngo Bao, Zulfikar
@@ -16,7 +17,9 @@ Credits:    The OrbitAttack is implemented with reference to Nettack's source co
             a method proposed in the paper: 'Adversarial Attacks on Neural Networks for Graph Data'
             by Daniel Zügner, Amir Akbarnejad and Stephan Günnemann
 """
-dataset_name = 'polblogs'
+
+random.seed(10)
+dataset_name = 'cora'
 df_2d = OrbitTableGenerator(dataset_name).generate_orbit_table()
 device = "cpu"
 
@@ -91,7 +94,7 @@ num = len(node_list)
 nofnode_modification_lst = [1]
 
 time_result = []
-for i in range(5):
+for i in range(1):
 
 # Start the timer
     start_time = time.time()
@@ -107,7 +110,7 @@ for i in range(5):
         for target_node in tqdm(node_list):
             n_perturbations = edg_pub_rate #2 #math.ceil(degrees[target_node] * edg_pub_rate)  # int(degrees[target_node] * edg_pub_rate)
 
-            model = OrbitAttack(surrogate,df_2d, nnodes=adj.shape[0], attack_structure=True, attack_features=False, device=device)
+            model = OrbitAttack(surrogate,df_2d, nnodes=adj.shape[0], device=device)
             model = model.to(device)
             model.attack(features, adj, labels, target_node, n_perturbations, verbose=False)
             modified_adj = model.modified_adj
@@ -117,6 +120,7 @@ for i in range(5):
                 cnt1 += 1
 
         miss[1][_] = cnt1 / num
+        print( miss[1][_])
 
     ######################################## ++++++++++    END   ++++++++++ For Testing the model ##########################
 
