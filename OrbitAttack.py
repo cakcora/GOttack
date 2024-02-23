@@ -57,7 +57,7 @@ class OrbitAttack(BaseAttack):
         W = surrogate.gc1.weight @ surrogate.gc2.weight
         return W.detach().cpu().numpy()
 
-    def attack(self, features, adj, labels, target_node, n_perturbations, n_influencers= 0, ll_cutoff=0.004, verbose=True, **kwargs):
+    def attack(self, features, adj, labels, target_node, n_perturbations, n_influencers= 0, verbose=True, **kwargs):
         """Generate perturbations on the input graph.
 
         Parameters
@@ -82,10 +82,6 @@ class OrbitAttack(BaseAttack):
         n_influencers:
             number of influencer nodes when performing indirect attack.
             (setting `direct` to False). When `direct` is True, it would be ignored.
-        ll_cutoff : float
-            The critical value for the likelihood ratio test of the power law distributions.
-            See the Chi square distribution with one degree of freedom. Default value 0.004
-            corresponds to a p-value of roughly 0.95.
         verbose : bool
             whether to show verbose logs
         """
@@ -106,10 +102,7 @@ class OrbitAttack(BaseAttack):
             self.ori_features = features.tolil()
             self.modified_features = features.tolil()
 
-        self.cooc_matrix = self.modified_features.T.dot(self.modified_features).tolil()
 
-        attack_features = self.attack_features
-        attack_structure = self.attack_structure
         assert n_perturbations > 0, "need at least one perturbation"
 
         # adj_norm = utils.normalize_adj_tensor(modified_adj, sparse=True)
@@ -128,19 +121,6 @@ class OrbitAttack(BaseAttack):
             print("##### Attack only using structure perturbations #####")
             print("##### Performing {} perturbations #####".format(n_perturbations))
 
-        # Setup starting values of the likelihood ratio test.
-        degree_sequence_start = self.ori_adj.sum(0).A1
-        current_degree_sequence = self.modified_adj.sum(0).A1
-        d_min = 2
-
-        S_d_start = np.sum(np.log(degree_sequence_start[degree_sequence_start >= d_min]))
-        current_S_d = np.sum(np.log(current_degree_sequence[current_degree_sequence >= d_min]))
-        n_start = np.sum(degree_sequence_start >= d_min)
-        current_n = np.sum(current_degree_sequence >= d_min)
-        alpha_start = compute_alpha(n_start, S_d_start, d_min)
-
-        log_likelihood_orig = compute_log_likelihood(n_start, alpha_start, S_d_start, d_min)
-
 
         self.potential_edges = (np.array([[target_node, value] for value in self.matching_index])).astype("int32")
 
@@ -149,25 +129,7 @@ class OrbitAttack(BaseAttack):
             if verbose:
                 print("##### ...{}/{} perturbations ... #####".format(_+1, n_perturbations))
 
-            # Do not consider edges that, if removed, result in singleton edges in the graph.
-            # singleton_filter = filter_singletons(self.potential_edges, self.modified_adj)
-            filtered_edges = self.potential_edges
 
-            # Update the values for the power law likelihood ratio test.
-
-            deltas = 2 * (1 - self.modified_adj[tuple(filtered_edges.T)].toarray()[0] )- 1
-            d_edges_old = current_degree_sequence[filtered_edges]
-            d_edges_new = current_degree_sequence[filtered_edges] + deltas[:, None]
-            new_S_d, new_n = update_Sx(current_S_d, current_n, d_edges_old, d_edges_new, d_min)
-            new_alphas = compute_alpha(new_n, new_S_d, d_min)
-            new_ll = compute_log_likelihood(new_n, new_alphas, new_S_d, d_min)
-            alphas_combined = compute_alpha(new_n + n_start, new_S_d + S_d_start, d_min)
-            new_ll_combined = compute_log_likelihood(new_n + n_start, alphas_combined, new_S_d + S_d_start, d_min)
-            new_ratios = -2 * new_ll_combined + 2 * (new_ll + log_likelihood_orig)
-
-            # Do not consider edges that, if added/removed, would lead to a violation of the
-            # likelihood ration Chi_square cutoff value.
-            powerlaw_filter = filter_chisquare(new_ratios, ll_cutoff)
             filtered_edges_final =  self.potential_edges
 
             # Compute new entries in A_hat_square_uv
@@ -242,72 +204,7 @@ class OrbitAttack(BaseAttack):
         label_u_onehot = np.eye(self.nclass)[self.label_u]
         return (logits - 1000*label_u_onehot).argmax()
 
-    def feature_scores(self):
-        """Compute feature scores for all possible feature changes.
-        """
 
-        if self.cooc_constraint is None:
-            self.compute_cooccurrence_constraint(self.influencer_nodes)
-        logits = self.compute_logits()
-        best_wrong_class = self.strongest_wrong_class(logits)
-        surrogate_loss = logits[self.label_u] - logits[best_wrong_class]
-
-        gradient = self.gradient_wrt_x(self.label_u) - self.gradient_wrt_x(best_wrong_class)
-        # gradients_flipped = (gradient * -1).tolil()
-        gradients_flipped = sp.lil_matrix(gradient * -1)
-        gradients_flipped[self.modified_features.nonzero()] *= -1
-
-        X_influencers = sp.lil_matrix(self.modified_features.shape)
-        X_influencers[self.influencer_nodes] = self.modified_features[self.influencer_nodes]
-        gradients_flipped = gradients_flipped.multiply((self.cooc_constraint + X_influencers) > 0)
-        nnz_ixs = np.array(gradients_flipped.nonzero()).T
-
-        sorting = np.argsort(gradients_flipped[tuple(nnz_ixs.T)]).A1
-        sorted_ixs = nnz_ixs[sorting]
-        grads = gradients_flipped[tuple(nnz_ixs[sorting].T)]
-
-        scores = surrogate_loss - grads
-        return sorted_ixs[::-1], scores.A1[::-1]
-
-    def compute_cooccurrence_constraint(self, nodes):
-        """
-        Co-occurrence constraint as described in the paper.
-
-        Parameters
-        ----------
-        nodes: np.array
-            Nodes whose features are considered for change
-
-        Returns
-        -------
-        np.array [len(nodes), D], dtype bool
-            Binary matrix of dimension len(nodes) x D. A 1 in entry n,d indicates that
-            we are allowed to add feature d to the features of node n.
-
-        """
-
-        words_graph = self.cooc_matrix.copy()
-        D = self.modified_features.shape[1]
-        words_graph.setdiag(0)
-        words_graph = (words_graph > 0)
-        word_degrees = np.sum(words_graph, axis=0).A1
-
-        inv_word_degrees = np.reciprocal(word_degrees.astype(float) + 1e-8)
-
-        sd = np.zeros([self.nnodes])
-        for n in range(self.nnodes):
-            n_idx = self.modified_features[n, :].nonzero()[1]
-            sd[n] = np.sum(inv_word_degrees[n_idx.tolist()])
-
-        scores_matrix = sp.lil_matrix((self.nnodes, D))
-
-        for n in nodes:
-            common_words = words_graph.multiply(self.modified_features[n])
-            idegs = inv_word_degrees[common_words.nonzero()[1]]
-            nnz = common_words.nonzero()[0]
-            scores = np.array([idegs[nnz == ix].sum() for ix in range(D)])
-            scores_matrix[n] = scores
-        self.cooc_constraint = sp.csr_matrix(scores_matrix - 0.5 * sd[:, None] > 0)
 
     def gradient_wrt_x(self, label):
         # return self.adj_norm.dot(self.adj_norm)[self.target_node].T.dot(self.W[:, label].T)

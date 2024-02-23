@@ -94,7 +94,7 @@ num = len(node_list)
 nofnode_modification_lst = [1]
 
 time_result = []
-for i in range(1):
+for i in range(5):
 
 # Start the timer
     start_time = time.time()
@@ -112,7 +112,7 @@ for i in range(1):
 
             model = OrbitAttack(surrogate,df_2d, nnodes=adj.shape[0], device=device)
             model = model.to(device)
-            model.attack(features, adj, labels, target_node, n_perturbations, verbose=False)
+            model.attack(features, adj, labels, target_node, 1, verbose=False)
             modified_adj = model.modified_adj
             acc = test_acc_GCN(modified_adj, features, target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
             bst_edge[target_node] = [model.best_edge_list, acc]
