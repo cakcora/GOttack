@@ -85,8 +85,6 @@ surrogate = surrogate.to(device)
 surrogate.fit(features, adj, labels, idx_train, idx_val, patience=30)
 
 
-
-miss= np.zeros((6, 10))
 node_list = select_nodes()
 
 num = len(node_list)
@@ -99,28 +97,24 @@ for i in range(5):
 # Start the timer
     start_time = time.time()
 
-    for _ in range(len(nofnode_modification_lst)):
-        nofnode_modification = nofnode_modification_lst[_]
+    for budget in nofnode_modification_lst:
+
         cnt1=0
-        edg_pub_rate = nofnode_modification  # 0.
         degrees = adj.sum(0).A1
         num = len(node_list)
         bst_edge={}
 
         for target_node in tqdm(node_list):
-            n_perturbations = edg_pub_rate #2 #math.ceil(degrees[target_node] * edg_pub_rate)  # int(degrees[target_node] * edg_pub_rate)
 
             model = OrbitAttack(surrogate,df_2d, nnodes=adj.shape[0], device=device)
             model = model.to(device)
-            model.attack(features, adj, labels, target_node, 1, verbose=False)
+            model.attack(features, adj, labels, target_node, budget, verbose=False)
             modified_adj = model.modified_adj
             acc = test_acc_GCN(modified_adj, features, target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
             bst_edge[target_node] = [model.best_edge_list, acc]
             if acc == 0:
                 cnt1 += 1
-
-        miss[1][_] = cnt1 / num
-        print( miss[1][_])
+        print( cnt1 / num)
 
     ######################################## ++++++++++    END   ++++++++++ For Testing the model ##########################
 
