@@ -137,7 +137,7 @@ for budget in budget_list:
     row = []
     target_node = select_nodes()
 
-    #Orbit attack
+    #Orbit attack(1518)
     surrogate = set_up_surrogate_model(features, adj, labels, idx_train, idx_val)
     model = OrbitAttack(surrogate, df_orbit, nnodes=adj.shape[0], device=device)
     model = model.to(device)
