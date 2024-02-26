@@ -14,6 +14,7 @@ from deeprobust.graph.data import Dataset, Dpr2Pyg
 from model.GIN import GIN
 from model.GSAGE import GraphSAGE
 from deeprobust.graph.targeted_attack import Nettack
+import scipy.sparse as sp
 
 """
 Author: Ngo Bao, Zulfikar
@@ -25,10 +26,12 @@ Credits:    The OrbitAttack is implemented with reference to Nettack's source co
 random.seed(10)
 dataset_name = 'cora'
 df_orbit = OrbitTableGenerator(dataset_name).generate_orbit_table()
-device = "cpu"
+device= "cpu"
 
 
-def test_acc_GCN(adj, features, target_node):
+def test_acc_GCN(adj, features, data,target_node):
+    idx_train, idx_val = data.idx_train, data.idx_val
+    labels = data.labels
     ''' test on GCN '''
     gcn = GCN(nfeat=features.shape[1], nhid=16, nclass=labels.max().item() + 1, dropout=0.5, device=device)
     gcn = gcn.to(device)
@@ -40,8 +43,14 @@ def test_acc_GCN(adj, features, target_node):
     return acc_test.item()
 
 def test_acc_GIN(adj,features, data, target_node):
+    labels = data.labels
+
     ''' test on GIN '''
+    # reset feature to 0------------------------Remove this line if you don't want to feed GIN with node features.
+    data.features = sp.csr_matrix(data.features.shape, dtype=int)
     pyg_data = Dpr2Pyg(data)
+
+
     gin = GIN(nfeat=features.shape[1], nhid=8, heads=8, nclass=labels.max().item() + 1, dropout=0.5, device=device)
     gin = gin.to(device)
     perturbed_adj = adj.tocsr()
@@ -53,7 +62,8 @@ def test_acc_GIN(adj,features, data, target_node):
 
     return acc_test.item()
 
-def test_GSAGE(adj,features, data, target_node):
+def test_acc_GSAGE(adj,features, data, target_node):
+    labels= data.labels
     ''' test on GSAGE '''
     pyg_data = Dpr2Pyg(data)
     gsage = GraphSAGE(nfeat=features.shape[1], nhid=8, heads=8, nclass=labels.max().item() + 1, dropout=0.5, device=device)
@@ -105,14 +115,23 @@ def set_up_surrogate_model(features, adj, labels, idx_train, idx_val):
     surrogate.fit(features, adj, labels, idx_train, idx_val, patience=30)
     return surrogate
 
-def attack (attack_model, target_node_list,budget,features,adj,labels,test_model = 'GCN',verbose = False):
+def attack (data,attack_model, target_node_list,budget,features,adj,labels,test_model,verbose = False):
     miss = 0
     for target_node in tqdm(target_node_list):
         attack_model.attack(features, adj, labels, target_node, budget, verbose=verbose)
         modified_adj = attack_model.modified_adj
         if test_model == 'GCN':
-            acc = test_acc_GCN(modified_adj, features,
+            acc = test_acc_GCN(modified_adj, features,data,
                                target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
+        elif test_model == 'GIN':
+
+            acc = test_acc_GIN(modified_adj, features,data,
+                               target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
+        elif test_model == 'GSAGE':
+            acc = test_acc_GSAGE(modified_adj, features,data,
+                               target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
+        else:
+            raise Exception("Test model is not supported")
         if acc == 0:
             miss += 1
     return miss / len(target_node_list)
@@ -132,6 +151,7 @@ idx_unlabeled = np.union1d(idx_val, idx_test)
 method = ['1518','Nettack']
 budget_list = [1]
 rowlist = []
+test_model = 'GCN'
 
 for budget in budget_list:
     row = []
@@ -141,21 +161,22 @@ for budget in budget_list:
     surrogate = set_up_surrogate_model(features, adj, labels, idx_train, idx_val)
     model = OrbitAttack(surrogate, df_orbit, nnodes=adj.shape[0], device=device)
     model = model.to(device)
-    miss_percentage = attack(model, target_node,budget,features,adj,labels)
+
+    miss_percentage = attack(data,model, target_node,budget,features,adj,labels,test_model)
     row.append(miss_percentage)
 
     # Nettack
     surrogate = set_up_surrogate_model(features, adj, labels, idx_train, idx_val)
     model = Nettack(surrogate, nnodes=adj.shape[0], attack_structure=True, attack_features=False, device=device)
     model = model.to(device)
-    miss_percentage = attack(model, target_node, budget, features, adj, labels)
+    miss_percentage = attack(data,model, target_node, budget, features, adj, labels,test_model)
     row.append(miss_percentage)
 
 
     rowlist.append(row)
 
 result = pd.DataFrame(rowlist,columns=method,index=budget_list)
-result.to_csv('./results/result.csv')
+result.to_csv('./results/result_GIN_no_feature.csv')
 
 
 
