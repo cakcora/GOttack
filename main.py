@@ -5,7 +5,6 @@ from tqdm import tqdm
 import warnings
 
 from OrbitAttack import OrbitAttack
-from old_code.OrbitAttackModified import OrbitAttackModified
 
 warnings.filterwarnings("ignore")
 from orbit_table_generator import OrbitTableGenerator
