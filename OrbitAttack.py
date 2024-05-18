@@ -1,9 +1,12 @@
 
 """
-Author: Ngo Bao, Zulfikar
-Credits:    The OrbitAttack is implemented with reference to Nettack's source code,
+Author: Anonymous Authors
+Credits:
+            - The OrbitAttack is implemented with reference to Nettack's source code,
             a method proposed in the paper: 'Adversarial Attacks on Neural Networks for Graph Data'
             by Daniel Zügner, Amir Akbarnejad and Stephan Günnemann
+            - Gottack is built on top of DeepRobust - A PyTorch Library for Adversarial
+            Attacks and Defenses developed by Yaxin Li, Wei Jin, Han Xu and Jiliang Tang
 """
 
 import torch
@@ -24,7 +27,15 @@ from torch import spmm
 class OrbitAttack(BaseAttack):
 
 
-    def __init__(self, model,orbit_dict,attack_type = '1518', nnodes=None, device='cpu'):
+    def __init__(self, model,orbit_dict,attack_type = '1518', nnodes=None, device='cpu',orbit_type = "two_Orbit_type"):
+        """
+        Input:
+            model: surrogate model
+            orbit_dict: pandas dataframe of orbit type of all nodes in the network
+            attack_type: orbit type of candidate nodes
+            orbit_type: 3 available options: Orbit_type_I,Orbit_type_II and two_Orbit_type
+            Gottack uses the same setting as default function's parameters
+        """
 
         super(OrbitAttack, self).__init__(model, nnodes, attack_structure=True, attack_features=False, device=device)
 
@@ -33,7 +44,7 @@ class OrbitAttack(BaseAttack):
         self.influencer_nodes = []
         self.potential_edges = []
         self.best_edge_list=[]
-        self.matching_index = orbit_dict.index[orbit_dict["two_Orbit_type"] == attack_type].tolist()
+        self.matching_index = orbit_dict.index[orbit_dict[orbit_type] == attack_type].tolist()
 
 
         self.cooc_constraint = None

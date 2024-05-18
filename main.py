@@ -1,32 +1,30 @@
 import pandas as pd
-import time
-import statistics as stats
 from deeprobust.graph.defense import GCN
 from deeprobust.graph.utils import *
 from tqdm import tqdm
-from deeprobust.graph.data import Dataset
 import warnings
-warnings.filterwarnings("ignore")
+
 from OrbitAttack import OrbitAttack
+from old_code.OrbitAttackModified import OrbitAttackModified
+
+warnings.filterwarnings("ignore")
 from orbit_table_generator import OrbitTableGenerator
 import random
 from deeprobust.graph.data import Dataset, Dpr2Pyg
 from model.GIN import GIN
 from model.GSAGE import GraphSAGE
 from deeprobust.graph.targeted_attack import Nettack
-import scipy.sparse as sp
 
 """
-Author: Ngo Bao, Zulfikar
-Credits:    The OrbitAttack is implemented with reference to Nettack's source code,
+Author: Anonymous Authors
+Credits:    
+            - The OrbitAttack is implemented with reference to Nettack's source code,
             a method proposed in the paper: 'Adversarial Attacks on Neural Networks for Graph Data'
             by Daniel Zügner, Amir Akbarnejad and Stephan Günnemann
+            - Gottack is built on top of DeepRobust - A PyTorch Library for Adversarial
+            Attacks and Defenses developed by Yaxin Li, Wei Jin, Han Xu and Jiliang Tang
 """
 
-random.seed(10)
-dataset_name = 'cora'
-df_orbit = OrbitTableGenerator(dataset_name).generate_orbit_table()
-device= "cpu"
 
 
 def test_acc_GCN(adj, features, data,target_node):
@@ -47,7 +45,7 @@ def test_acc_GIN(adj,features, data, target_node):
 
     ''' test on GIN '''
     # reset feature to 0------------------------Remove this line if you don't want to feed GIN with node features.
-    data.features = sp.csr_matrix(data.features.shape, dtype=int)
+    # data.features = sp.csr_matrix(data.features.shape, dtype=int)
     pyg_data = Dpr2Pyg(data)
 
 
@@ -117,6 +115,7 @@ def set_up_surrogate_model(features, adj, labels, idx_train, idx_val):
 
 def attack (data,attack_model, target_node_list,budget,features,adj,labels,test_model,verbose = False):
     miss = 0
+    false_class_node = []
     for target_node in tqdm(target_node_list):
         attack_model.attack(features, adj, labels, target_node, budget, verbose=verbose)
         modified_adj = attack_model.modified_adj
@@ -132,56 +131,104 @@ def attack (data,attack_model, target_node_list,budget,features,adj,labels,test_
                                target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
         else:
             raise Exception("Test model is not supported")
-        if acc == 0:
+
+        if target_node in false_class_node:
             miss += 1
+        elif acc == 0:
+            miss += 1
+            false_class_node.append(target_node)
     return miss / len(target_node_list)
 
-######################### Loading dataset  #########################
-data = Dataset(root='dataset', name=dataset_name)
-adj, features, labels = data.adj, data.features, data.labels
+def attack_net(surrogate,data, target_node_list,budget,features,adj,labels,test_model,verbose = False):
+    miss = 0
+    false_class_node = []
+    for target_node in tqdm(target_node_list):
+        model = Nettack(surrogate, nnodes=adj.shape[0], attack_structure=True, attack_features=False, device=device)
+        model = model.to(device)
+        model.attack(features, adj, labels, target_node, budget, verbose=verbose)
+        modified_adj = model.modified_adj
+        if test_model == 'GCN':
+            acc = test_acc_GCN(modified_adj, features, data,
+                               target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
+        elif test_model == 'GIN':
 
-idx_train, idx_val, idx_test = data.idx_train, data.idx_val, data.idx_test
-
-idx_unlabeled = np.union1d(idx_val, idx_test)
-
-######################### Setup GCN Surrogate model  #########################
-
-
-
-method = ['1518','Nettack']
-budget_list = [1]
-rowlist = []
-test_model = 'GCN'
-
-for budget in budget_list:
-    row = []
-    target_node = select_nodes()
-
-    #Orbit attack(1518)
-    surrogate = set_up_surrogate_model(features, adj, labels, idx_train, idx_val)
-    model = OrbitAttack(surrogate, df_orbit, nnodes=adj.shape[0], device=device)
-    model = model.to(device)
-
-    miss_percentage = attack(data,model, target_node,budget,features,adj,labels,test_model)
-    row.append(miss_percentage)
-
-    # Nettack
-    surrogate = set_up_surrogate_model(features, adj, labels, idx_train, idx_val)
-    model = Nettack(surrogate, nnodes=adj.shape[0], attack_structure=True, attack_features=False, device=device)
-    model = model.to(device)
-    miss_percentage = attack(data,model, target_node, budget, features, adj, labels,test_model)
-    row.append(miss_percentage)
+            acc = test_acc_GIN(modified_adj, features, data,
+                               target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
+        elif test_model == 'GSAGE':
+            acc = test_acc_GSAGE(modified_adj, features, data,
+                                 target_node)  # single_test(modified_adj, features, target_node, gcn=target_gcn)
+        else:
+            raise Exception("Test model is not supported")
+        if target_node in false_class_node:
+            miss += 1
+        elif acc == 0:
+            miss += 1
+            false_class_node.append(target_node)
+    return miss / len(target_node_list)
 
 
-    rowlist.append(row)
+if __name__ == '__main__':
+    '''
+       Config attack method and dataset
+       method : list of adversarial techniques (1518 is Gottack)
+       budget list: Perturbation budget list
+       dataset_name : cora or citeseer or pubmed or polblogs or Blogcatalog 
+       
+    '''
+    method = ['1518', 'Nettack']
+    budget_list = [1,2,3,4,5]
+    random.seed(102)
+    dataset_name = 'cora'
+    df_orbit = OrbitTableGenerator(dataset_name).generate_orbit_table()
+    device= "cpu"
 
-result = pd.DataFrame(rowlist,columns=method,index=budget_list)
-result.to_csv('./results/result_GIN_no_feature.csv')
+    print("INFO: Applying adversarial techniques {} on {} dataset with perturbation budget {} ".format(method, dataset_name,budget_list))
+
+    ######################### Loading dataset  #########################
+    data = Dataset(root='dataset', name=dataset_name)
+    adj, features, labels = data.adj, data.features, data.labels
+
+    idx_train, idx_val, idx_test = data.idx_train, data.idx_val, data.idx_test
 
 
+    rowlist = []
+    test_model = 'GCN'
+
+    for budget in budget_list:
+        row = []
+        target_node = select_nodes()
+
+        #Orbit attack(1518)
+        surrogate = set_up_surrogate_model(features, adj, labels, idx_train, idx_val)
+        model = OrbitAttack(surrogate, df_orbit, nnodes=adj.shape[0], device=device)
+        # model = OrbitAttackModified(surrogate, df_orbit, nnodes=adj.shape[0], device=device,attack_type="1518",orbit_type="two_Orbit_type")
+        model = model.to(device)
+        miss_percentage = attack(data,model, target_node,budget,features,adj,labels,test_model)
+        row.append(miss_percentage)
+
+        # Nettack
+        surrogate = set_up_surrogate_model(features, adj, labels, idx_train, idx_val)
+        model = Nettack(surrogate, nnodes=adj.shape[0], attack_structure=True, attack_features=False, device=device)
+        model = model.to(device)
+        miss_percentage = attack_net(surrogate,data, target_node, budget, features, adj, labels,test_model)
+        row.append(miss_percentage)
+
+        '''
+        Additional adversarial attacks can also be called easily with API provided by DeepRobust
+        For further documentation: https://deeprobust.readthedocs.io/en/latest/
+        For example, FGA can be called as follows:
+        '''
+        # #FGA
+        # surrogate = set_up_surrogate_model(features, adj, labels, idx_train, idx_val)
+        # model = FGA(surrogate, nnodes=adj.shape[0], attack_structure=True, attack_features=False, device=device)
+        # model = model.to(device)
+        # miss_percentage = attack_net(surrogate, data, target_node, budget, features, adj, labels, test_model)
+        # print(budget, miss_percentage)
+        # row.append(miss_percentage)
 
 
+        rowlist.append(row)
 
-
-
-
+    #Save results
+    result = pd.DataFrame(rowlist,columns=method,index=budget_list)
+    result.to_csv('./results/result_{}_{}.csv'.format(test_model,dataset_name))

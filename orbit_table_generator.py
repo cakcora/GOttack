@@ -38,8 +38,27 @@ class OrbitTableGenerator:
             else:
                 s1 = str(sorted_indices[1]) + str(sorted_indices[0])
 
-            mylist.append([i, sorted_indices[0], sorted_indices[1], s1])
+            mylist.append([i, str(sorted_indices[0]), str(sorted_indices[1]), s1])
 
         my_array = np.array(mylist)
         df_2d = pd.DataFrame(my_array, columns=['node_number', 'Orbit_type_I', 'Orbit_type_II', 'two_Orbit_type'])
         return df_2d
+
+def generate_orbit_tables_from_count(data_list,nodes_list):
+    # Convert the list of lists to a NumPy array
+
+    graphlet_features = np.array(data_list)
+    mylist = []
+    for i in range(len(graphlet_features)):
+        arr = graphlet_features[i]
+        sorted_indices = np.argsort(arr)[::-1]
+        if sorted_indices[0] < sorted_indices[1]:
+            s1 = str(sorted_indices[0]) + str(sorted_indices[1])
+        else:
+            s1 = str(sorted_indices[1]) + str(sorted_indices[0])
+
+        mylist.append([nodes_list[i], str(sorted_indices[0]), str(sorted_indices[1]), s1])
+
+    my_array = np.array(mylist)
+    df_2d = pd.DataFrame(my_array, columns=['node_number', 'Orbit_type_I', 'Orbit_type_II', 'two_Orbit_type'])
+    return df_2d

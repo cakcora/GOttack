@@ -22,21 +22,6 @@ class GIN(nn.Module):
         assert device is not None, "Please specify 'device'!"
         self.device = device
 
-        # self.conv1 = GATConv(
-        #     nfeat,
-        #     nhid,
-        #     heads=heads,
-        #     dropout=dropout,
-        #     bias=with_bias)
-
-        # self.conv2 = GATConv(
-        #     nhid * heads,
-        #     nclass,
-        #     heads=output_heads,
-        #     concat=False,
-        #     dropout=dropout,
-        #     bias=with_bias)
-
         self.gc1 = GINConv(
             Sequential(Linear(nfeat, nhid), ReLU(),
                        Linear(nhid, nhid), ReLU()))
@@ -58,12 +43,6 @@ class GIN(nn.Module):
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
-        # x = F.dropout(x, p=self.dropout, training=self.training)
-        # x = F.elu(self.conv1(x, edge_index))
-        # x = F.dropout(x, p=self.dropout, training=self.training)
-        # x = self.conv2(x, edge_index)
-        # return F.log_softmax(x, dim=1)
-
         h1 = self.gc1(x, edge_index)
         h2 = self.gc2(h1, edge_index)
         h3 = self.gc3(h2, edge_index)

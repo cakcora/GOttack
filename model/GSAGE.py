@@ -11,7 +11,7 @@ from copy import deepcopy
 from torch_geometric.nn import GATConv
 from torch_geometric.nn import GCNConv, GINConv,SAGEConv
 
-#-------------------------------------Hi Zulfikar! TRY THIS ONES-----------------------------------
+
 class GraphSAGE(nn.Module):
 
     def __init__(self, nfeat, nhid, nclass, heads=8, output_heads=1, dropout=0.5, lr=0.01,
@@ -21,21 +21,6 @@ class GraphSAGE(nn.Module):
 
         assert device is not None, "Please specify 'device'!"
         self.device = device
-
-        # self.conv1 = GATConv(
-        #     nfeat,
-        #     nhid,
-        #     heads=heads,
-        #     dropout=dropout,
-        #     bias=with_bias)
-
-        # self.conv2 = GATConv(
-        #     nhid * heads,
-        #     nclass,
-        #     heads=output_heads,
-        #     concat=False,
-        #     dropout=dropout,
-        #     bias=with_bias)
 
         self.conv1 = SAGEConv(nfeat, nhid)
         self.conv2 = SAGEConv(nhid, nhid)
@@ -49,13 +34,6 @@ class GraphSAGE(nn.Module):
         self.best_output = None
 
     def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-        # x = F.dropout(x, p=self.dropout, training=self.training)
-        # x = F.elu(self.conv1(x, edge_index))
-        # x = F.dropout(x, p=self.dropout, training=self.training)
-        # x = self.conv2(x, edge_index)
-        # return F.log_softmax(x, dim=1)
-
         x = self.conv1(data.x, data.edge_index)
         x = F.elu(x)
         x = F.dropout(x, p=self.dropout)
