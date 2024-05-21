@@ -158,7 +158,7 @@ class GIN(nn.Module):
         Returns
         -------
         torch.FloatTensor
-            output (log probabilities) of GAT
+            output (log probabilities) of GIN
         """
 
         self.eval()
