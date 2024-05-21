@@ -48,7 +48,7 @@ class GraphSAGE(nn.Module):
         return F.log_softmax(x, dim=1)
 
     def initialize(self):
-        """Initialize parameters of GAT.
+        """Initialize parameters of GSAGE.
         """
         self.conv1.reset_parameters()
         self.conv2.reset_parameters()
@@ -87,7 +87,7 @@ class GraphSAGE(nn.Module):
         """early stopping based on the validation loss
         """
         if verbose:
-            print('=== training GIN model ===')
+            print('=== training GSAGE model ===')
 
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
@@ -153,7 +153,7 @@ class GraphSAGE(nn.Module):
         Returns
         -------
         torch.FloatTensor
-            output (log probabilities) of GAT
+            output (log probabilities) of GSAGE
         """
 
         self.eval()
