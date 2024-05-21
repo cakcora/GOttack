@@ -1,4 +1,4 @@
-# Gottack
+# GOttack
 Universal Adversarial Attacks on Graph
 Neural Networks via Graph Orbits Learning
 
@@ -8,6 +8,10 @@ a method proposed in the paper: 'Adversarial Attacks on Neural Networks for Grap
 by Daniel Zügner, Amir Akbarnejad and Stephan Günnemann
 - Gottack is built on top of ````DeepRobust```` - A PyTorch Library for Adversarial
 Attacks and Defenses developed by Yaxin Li, Wei Jin, Han Xu and Jiliang Tang
+
+## Requirement
+
+python 3.6
 
 ## Instruction
 
