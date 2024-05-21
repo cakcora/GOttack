@@ -57,7 +57,7 @@ class GraphSAGE(nn.Module):
 
 
     def fit(self, pyg_data, train_iters=1000, initialize=True, verbose=False, patience=100, **kwargs):
-        """Train the GAT model, when idx_val is not None, pick the best model
+        """Train the GSAGE model, when idx_val is not None, pick the best model
         according to the validation loss.
 
         Parameters
@@ -128,7 +128,7 @@ class GraphSAGE(nn.Module):
              print('=== early stopping at {0}, loss_val = {1} ==='.format(i, best_loss_val) )
         self.load_state_dict(weights)
     def test(self):
-        """Evaluate GAT performance on test set.
+        """Evaluate GSAGE performance on test set.
 
         Parameters
         ----------
