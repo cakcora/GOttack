@@ -2,7 +2,7 @@
 
 Here we provide the implementation of GOttack for our ICLR 2025 paper "GOttack: Universal Adversarial Attacks on Graph Neural Networks via Graph Orbits Learning (ICLR 2025)".
 
-Other resources: [Project page]() - [Paper](https://openreview.net/forum?id=YbURbViE7l) - [Video(Slideslive)]()
+Other resources: [Project page](https://fdatalab.github.io/GOttack/) - [Paper](https://openreview.net/forum?id=YbURbViE7l) - [Video(Slideslive)](https://iclr.cc/virtual/2025/poster/29256)
 
 Please cite our paper if you use the method in your own work:
 
